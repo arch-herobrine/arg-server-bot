@@ -4,12 +4,14 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "start": "npm run build && node ."
   },
   "dependencies": {
+    "@arch-herobrine/logger.js": "^3.0.1",
     "discord.js": "^14.26.3",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "typescript": "^5.5.3"

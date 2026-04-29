@@ -136,12 +136,12 @@ client.on("messageCreate", async (msg) => {
         const rolledStr = `${d100Result} ${result == "success" ? "成功" : result == "failed" ? "失敗" : result == "critical" ? "クリティカル" : "ファンブル"}(目標値: ${target})`
         return msg.reply({
             "embeds": [{
-                "title": `${isCCB?"CCB":"CC"}<=${target}`,
+                "title": `${isCCB ? "CCB" : "CC"}<=${target}`,
                 "description": rolledStr,
                 "color": result == "success" || result == "critical" ? 0x41d2f2 : 0xeb4034,
                 "author": {
-                    "name": msg.author.displayName,
-                    "icon_url": msg.author.avatarURL() ?? undefined
+                    "name": msg.member?.displayName ?? msg.author.displayName,
+                    "icon_url": msg.member?.avatarURL() ?? msg.author.avatarURL() ?? undefined
                 }
             }],
             "allowedMentions": {repliedUser: false}
@@ -221,8 +221,8 @@ client.on("messageCreate", async (msg) => {
                     "description": rolledStr,
                     "color": targetCalc != null ? success ? 0x41d2f2 : 0xeb4034 : 0x71f26d,
                     "author": {
-                        "name": msg.author.displayName,
-                        "icon_url": msg.author.avatarURL() ?? undefined
+                        "name": msg.member?.displayName ?? msg.author.displayName,
+                        "icon_url": msg.member?.avatarURL() ?? msg.author.avatarURL() ?? undefined
                     }
                 }],
                 "allowedMentions": {repliedUser: false}

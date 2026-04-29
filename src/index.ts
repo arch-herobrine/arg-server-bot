@@ -135,7 +135,6 @@ client.on("messageCreate", async (msg) => {
         }
         const rolledStr = `${d100Result} ${result == "success" ? "成功" : result == "failed" ? "失敗" : result == "critical" ? "クリティカル" : "ファンブル"}(目標値: ${target})`
         return msg.reply({
-            "content": rolledStr,
             "embeds": [{
                 "title": `${isCCB?"CCB":"CC"}<=${target}`,
                 "description": rolledStr,

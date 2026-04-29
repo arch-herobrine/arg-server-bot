@@ -100,13 +100,14 @@ client.on("messageCreate", async (msg) => {
             });
         }
         const target = Math.floor(targetCalc.sum);
-        if(target<=0){
+        if (target <= 0) {
             return msg.reply({
                 "content": "自動失敗",
                 "allowedMentions": {repliedUser: false}
             });
         }
-        if (/^ccb/i.test(msg.content)) {
+        const isCCB = /^ccb/i.test(msg.content);
+        if (isCCB) {
             if (d100Result == 100) {
                 result = "fumble";
             } else if (d100Result <= Math.floor(targetCalc.sum)) {
@@ -114,13 +115,13 @@ client.on("messageCreate", async (msg) => {
                 if (d100Result <= 5) {
                     result = "critical";
                 }
-            }else{
+            } else {
                 result = "failed";
-                if(d100Result >= 96) {
+                if (d100Result >= 96) {
                     result = "fumble";
                 }
             }
-        }else {
+        } else {
             if (d100Result == 100) {
                 result = "fumble";
             } else if (d100Result <= Math.floor(targetCalc.sum)) {
@@ -128,12 +129,22 @@ client.on("messageCreate", async (msg) => {
                 if (d100Result == 1) {
                     result = "critical";
                 }
-            }else{
+            } else {
                 result = "failed";
             }
         }
+        const rolledStr = `${d100Result} ${result == "success" ? "成功" : result == "failed" ? "失敗" : result == "critical" ? "クリティカル" : "ファンブル"}(目標値: ${target})`
         return msg.reply({
-            "content": `${d100Result} ${result=="success"?"成功":result=="failed"?"失敗":result=="critical"?"クリティカル":"ファンブル"}(目標値: ${target})`,
+            "content": rolledStr,
+            "embeds": [{
+                "title": `${isCCB?"CCB":"CC"}<=${target}`,
+                "description": rolledStr,
+                "color": result == "success" || result == "critical" ? 0x41d2f2 : 0xeb4034,
+                "author": {
+                    "name": msg.author.displayName,
+                    "icon_url": msg.author.avatarURL() ?? undefined
+                }
+            }],
             "allowedMentions": {repliedUser: false}
         });
     } else if (/^dice/.test(msg.content)) {
@@ -206,7 +217,15 @@ client.on("messageCreate", async (msg) => {
             const rolledStr = parts.length == 1 ? `${rolled.sum} ${targetCalc != null ? success ? `成功(目標値${Math.floor(targetCalc.sum)}) ` : `失敗(目標値${Math.floor(targetCalc.sum)}) ` : ""}(${lengthFlag ? "長すぎるため省略" : rolled.rolled.join(",")})` : `${Math.floor(rolled.sum) ? rolled.sum : `${Math.floor(rolled.sum)} [${rolled.sum}]`} ${targetCalc != null ? success ? `成功(目標値${Math.floor(targetCalc.sum)}) ` : `失敗(目標値${Math.floor(targetCalc.sum)}) ` : ""}(${formatted})`;
             logger.log(rolledStr);
             msg.reply({
-                "content": rolledStr,
+                "embeds": [{
+                    "title": rolled.exp,
+                    "description": rolledStr,
+                    "color": targetCalc != null ? success ? 0x41d2f2 : 0xeb4034 : 0x71f26d,
+                    "author": {
+                        "name": msg.author.displayName,
+                        "icon_url": msg.author.avatarURL() ?? undefined
+                    }
+                }],
                 "allowedMentions": {repliedUser: false}
             });
         }

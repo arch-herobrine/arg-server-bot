@@ -1,4 +1,12 @@
-import { Client, GatewayIntentBits, Collection, CmdContent, BtnContent, ChatInputCommandInteraction, ApplicationCommandData } from "discord.js";
+import {
+    Client,
+    GatewayIntentBits,
+    Collection,
+    CmdContent,
+    BtnContent,
+    ChatInputCommandInteraction,
+    ApplicationCommandData
+} from "discord.js";
 import fetch from "node-fetch";
 import path from "node:path";
 import URL from "node:url";
@@ -6,10 +14,12 @@ import fs from "node:fs";
 import Logger from "@arch-herobrine/logger.js";
 import botConfig from "./config.js";
 import style from "./util/ansi.js";
+import dice from "./util/dice.js";
+
 const __dirname = path.dirname(URL.fileURLToPath(import.meta.url));
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
-const logger = new Logger({ timeZone: "Asia/Tokyo" });
+const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]});
+const logger = new Logger({timeZone: "Asia/Tokyo"});
 client.token = botConfig.bot_token;
 client.cmds = new Collection();
 client.btns = new Collection();
@@ -32,7 +42,7 @@ try {
     }
 } catch (e: any) {
     logger.error("Button Interactionの読み込み中にエラーが発生しました:", `\n${style.ansi("41m") + e + style.ansi(`0;38;5;${0xf5}m`) + e.stack?.replace(`${e}`, "") + style.reset}`);
-    process.exit(1);
+    //process.exit(1);
 }
 logger.info("Button Interactionの読み込みが完了しました");
 const cmdPath = path.join(basePath, "cmd");
@@ -52,7 +62,7 @@ try {
     }
 } catch (e: any) {
     logger.error("Slash Commandの読み込み中にエラーが発生しました:", `\n${style.ansi("41m") + e + style.ansi(`0;38;5;${0xf5}m`) + e.stack?.replace(`${e}`, "") + style.reset}`);
-    process.exit(1);
+    //process.exit(1);
 }
 logger.info("Slash Commandの読み込みが完了しました");
 
@@ -60,15 +70,148 @@ process.on("uncaughtException", (e) => {
     logger.error(`${style.ansi("41m") + e + style.ansi(`0;38;5;${0xf5}m`) + e.stack?.replace(`${e}`, "") + style.reset}`);
 });
 
-client.once("ready", async () => {
-    let appCmd:ApplicationCommandData[] = [];
-    client.cmds.each((v) => { appCmd.push(v.data); });
+client.once("clientReady", async () => {
+    let appCmd: ApplicationCommandData[] = [];
+    client.cmds.each((v) => {
+        appCmd.push(v.data);
+    });
     await client.application?.commands.set(appCmd);
     logger.info(`Ready to as ${client.user?.tag}`);
 });
 
 client.on("messageCreate", async (msg) => {
+    logger.log(msg.content);
+    if (/^CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content)) {
+        const parsed = msg.content.replace(/CCB?\<\=/i, "")
+            .match(/([\d\+\-\*\/\(\)]+)/i);
+        if (!parsed) {
+            return msg.reply({
+                "content": "不正な入力",
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+        const targetCalc = dice(parsed[0]);
+        const d100Result = dice("1d100").sum;
+        let result: null | "success" | "failed" | "critical" | "fumble" = null;
+        if (!targetCalc.exp) {
+            return msg.reply({
+                "content": "不正な入力",
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+        const target = Math.floor(targetCalc.sum);
+        if(target<=0){
+            return msg.reply({
+                "content": "自動失敗",
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+        if (/^ccb/i.test(msg.content)) {
+            if (d100Result == 100) {
+                result = "fumble";
+            } else if (d100Result <= Math.floor(targetCalc.sum)) {
+                result = "success";
+                if (d100Result <= 5) {
+                    result = "critical";
+                }
+            }else{
+                result = "failed";
+                if(d100Result >= 96) {
+                    result = "fumble";
+                }
+            }
+        }else {
+            if (d100Result == 100) {
+                result = "fumble";
+            } else if (d100Result <= Math.floor(targetCalc.sum)) {
+                result = "success";
+                if (d100Result == 1) {
+                    result = "critical";
+                }
+            }else{
+                result = "failed";
+            }
+        }
+        return msg.reply({
+            "content": `${d100Result} ${result=="success"?"成功":result=="failed"?"失敗":result=="critical"?"クリティカル":"ファンブル"}(目標値: ${target})`,
+            "allowedMentions": {repliedUser: false}
+        });
+    } else if (/^dice/.test(msg.content)) {
+        const parsed = msg.content.replace(/^dice([ 　]*)?/, "")
+            .match(/([\d\+\-\*\/\(\)D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)]+))?/i);
+        if (parsed?.length) {
+            const rolled = dice(parsed[1]);
+            if (rolled.exp == undefined) {
+                return msg.reply({
+                    "content": "不正な入力",
+                    "allowedMentions": {repliedUser: false}
+                });
+            }
+            logger.log(rolled.exp.split(/([\+\-\*\/])/));
+            let pointer = 0;
+            const parts = rolled.exp.split(/([\+\-\*\/\(\)])/);
+            const lengthFlag = 1500 <= (rolled.rolled.join(",").length + rolled.exp.length);
+            const formatted = [...parts].map(part => {
+                const diceMatch = part.match(/(\d+)d(\d+)/i);
+                if (diceMatch) {
+                    const count = parseInt(diceMatch[1], 10);
+                    const current = rolled.rolled.slice(pointer, pointer + count);
+                    pointer += count;
+                    const chunkSum = current.reduce((a, b) => a + b, 0);
+                    return ((count <= 1) || lengthFlag) ? `${chunkSum}` : `${chunkSum}[${current.join(",")}]`;
+                }
+                return part;
+            }).join('');
+            let targetCalc: IDiceResult | null = null;
+            let success = false;
+            if (parsed[2]) {
+                targetCalc = dice(parsed[3]);
+                if (!targetCalc.exp) {
+                    return msg.reply({
+                        "content": "不正な入力",
+                        "allowedMentions": {repliedUser: false}
+                    });
+                }
 
+                switch (parsed[2]) {
+                    case "=": {
+                        success = Math.floor(rolled.sum) == Math.floor(targetCalc.sum);
+                        break;
+                    }
+                    case "<>": {
+                        success = Math.floor(rolled.sum) != Math.floor(targetCalc.sum);
+                        break;
+                    }
+                    case "<=": {
+                        success = Math.floor(rolled.sum) <= Math.floor(targetCalc.sum);
+                        break;
+                    }
+                    case ">=": {
+                        success = Math.floor(rolled.sum) >= Math.floor(targetCalc.sum);
+                        break;
+                    }
+                    case ">": {
+                        success = Math.floor(rolled.sum) > Math.floor(targetCalc.sum);
+                        break;
+                    }
+                    case "<": {
+                        success = Math.floor(rolled.sum) < Math.floor(targetCalc.sum);
+                        break;
+                    }
+                    default: {
+                        break;
+                    }
+                }
+            }
+            const rolledStr = parts.length == 1 ? `${rolled.sum} ${targetCalc != null ? success ? `成功(目標値${Math.floor(targetCalc.sum)}) ` : `失敗(目標値${Math.floor(targetCalc.sum)}) ` : ""}(${lengthFlag ? "長すぎるため省略" : rolled.rolled.join(",")})` : `${Math.floor(rolled.sum) ? rolled.sum : `${Math.floor(rolled.sum)} [${rolled.sum}]`} ${targetCalc != null ? success ? `成功(目標値${Math.floor(targetCalc.sum)}) ` : `失敗(目標値${Math.floor(targetCalc.sum)}) ` : ""}(${formatted})`;
+            logger.log(rolledStr);
+            msg.reply({
+                "content": rolledStr,
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+
+    }
 });
 
 client.on("interactionCreate", async (int) => {
@@ -79,13 +222,13 @@ client.on("interactionCreate", async (int) => {
             return;
         }
         try {
-            await cmd.exec(int, client, logger);
+            cmd.exec(int, client, logger);
         } catch (error) {
             logger.error(error);
             if (int.replied || int.deferred) {
-                await int.followUp({ content: "コマンドの実行中にエラーが発生しました", ephemeral: true });
+                await int.followUp({content: "コマンドの実行中にエラーが発生しました", ephemeral: true});
             } else {
-                await int.reply({ content: "コマンドの実行中にエラーが発生しました", ephemeral: true });
+                await int.reply({content: "コマンドの実行中にエラーが発生しました", ephemeral: true});
             }
         }
     } else if (int.isButton()) {
@@ -95,13 +238,13 @@ client.on("interactionCreate", async (int) => {
             return;
         }
         try {
-            await btn.exec(int, client, logger);
+            btn.exec(int, client, logger);
         } catch (error) {
             logger.error(error);
             if (int.replied || int.deferred) {
-                await int.followUp({ content: "ボタンの処理中にエラーが発生しました", ephemeral: true });
+                await int.followUp({content: "ボタンの処理中にエラーが発生しました", ephemeral: true});
             } else {
-                await int.reply({ content: "ボタンの処理中にエラーが発生しました", ephemeral: true });
+                await int.reply({content: "ボタンの処理中にエラーが発生しました", ephemeral: true});
             }
         }
     }

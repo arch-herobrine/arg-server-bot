@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "npx tsc",
-    "start": "npm run build && node ."
+    "start": "npm run build && node --env-file-if-exists=.env ."
   },
   "dependencies": {
     "@arch-herobrine/logger.js": "^3.0.1",
@@ -15,5 +15,6 @@
   "devDependencies": {
     "typescript": "^5.5.3"
   },
-  "private": true
+  "private": true,
+  "type": "module"
 }

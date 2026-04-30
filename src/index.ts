@@ -62,7 +62,7 @@ try {
     }
 } catch (e: any) {
     logger.error("Slash Commandの読み込み中にエラーが発生しました:", `\n${style.ansi("41m") + e + style.ansi(`0;38;5;${0xf5}m`) + e.stack?.replace(`${e}`, "") + style.reset}`);
-    //process.exit(1);
+    process.exit(1);
 }
 logger.info("Slash Commandの読み込みが完了しました");
 

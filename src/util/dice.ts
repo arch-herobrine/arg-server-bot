@@ -15,7 +15,12 @@ const dice = (exp: string): IDiceResult => {
     let val: IDiceResult = {sum: NaN, rolled: []};
     try {
         const fn = new Function('"use strict"; const rolled = []; const sum = ' + exp
-            .replace(/(\d+)?D(\d+)/ig, (code, c, f) => `roll(${c || '1'},${f}, rolled)`) + '; return { sum, rolled, exp: "' + exp + '" }');
+            .replace(/(\d+)?D(\d+)/ig, (code, c, f) =>{
+                if(c>99999){
+                    throw new Error("ダイス数上限");
+                }
+                return `roll(${c || '1'},${f}, rolled)`
+            }) + '; return { sum, rolled, exp: "' + exp + '" }');
         val = fn();
     } catch (e) {
 

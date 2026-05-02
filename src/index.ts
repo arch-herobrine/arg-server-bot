@@ -81,7 +81,7 @@ client.once("clientReady", async () => {
 
 client.on("messageCreate", async (msg) => {
     logger.log(msg.content);
-    if(msg.author.bot) return;
+    if (msg.author.bot) return;
     if (/^CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content)) {
         const parsed = msg.content.replace(/CCB?\<\=/i, "")
             .match(/([\d\+\-\*\/\(\)]+)/i);
@@ -236,6 +236,12 @@ client.on("messageCreate", async (msg) => {
         if (!parsed || !repeat) {
             return msg.reply({
                 "content": "不正な入力",
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+        if (parseInt(repeat[1]) > 50) {
+            return msg.reply({
+                "content": "反復回数が多すぎます",
                 "allowedMentions": {repliedUser: false}
             });
         }

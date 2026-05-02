@@ -302,7 +302,7 @@ client.on("messageCreate", async (msg) => {
         return msg.reply({
             "embeds": [{
                 "title": `${isCCB ? "CCB" : "CC"}<=${target}`,
-                "description": rolledStrArr.join("\n").replaceAll("*", "\\*") + "\n"
+                "description": (parseInt(repeat[1]) > 10 ? "(10行超えたのでレシート化防ぐために省略)" : rolledStrArr.join("\n").replaceAll("*", "\\*")) + "\n"
                     + `成功: ${resultCount["success"]}, 失敗: ${resultCount["failed"]}, \n`
                     + `クリティカル: ${resultCount["critical"]}, ファンブル: ${resultCount["fumble"]}`,
                 "color": 0x71f26d,

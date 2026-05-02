@@ -81,6 +81,7 @@ client.once("clientReady", async () => {
 
 client.on("messageCreate", async (msg) => {
     logger.log(msg.content);
+    if(msg.author.bot) return;
     if (/^CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content)) {
         const parsed = msg.content.replace(/CCB?\<\=/i, "")
             .match(/([\d\+\-\*\/\(\)]+)/i);
@@ -228,7 +229,84 @@ client.on("messageCreate", async (msg) => {
                 "allowedMentions": {repliedUser: false}
             });
         }
-
+    } else if (/^x(\d+) CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content)) {
+        const parsed = msg.content.replace(/^x(\d+) CCB?\<\=/i, "")
+            .match(/([\d\+\-\*\/\(\)]+)/i);
+        const repeat = msg.content.match(/^x(\d+)/i);
+        if (!parsed || !repeat) {
+            return msg.reply({
+                "content": "不正な入力",
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+        const targetCalc = dice(parsed[0]);
+        const d100Results = dice(`${parseInt(repeat[1])}d100`).rolled;
+        let result: null | "success" | "failed" | "critical" | "fumble" = null;
+        let resultCount: { success: number; failed: number; critical: number; fumble: number } = {
+            "success": 0,
+            "failed": 0,
+            "critical": 0,
+            "fumble": 0
+        }
+        if (!targetCalc.exp) {
+            return msg.reply({
+                "content": "不正な入力",
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+        const target = Math.floor(targetCalc.sum);
+        if (target <= 0) {
+            return msg.reply({
+                "content": "自動失敗",
+                "allowedMentions": {repliedUser: false}
+            });
+        }
+        const isCCB = /^ccb/i.test(msg.content.replace(/^x(\d+) /i, ""));
+        const rolledStrArr: string[] = [];
+        for (const roll of d100Results) {
+            if (isCCB) {
+                if (roll == 100) {
+                    result = "fumble";
+                } else if (roll <= Math.floor(targetCalc.sum)) {
+                    result = "success";
+                    if (roll <= 5) {
+                        result = "critical";
+                    }
+                } else {
+                    result = "failed";
+                    if (roll >= 96) {
+                        result = "fumble";
+                    }
+                }
+            } else {
+                if (roll == 100) {
+                    result = "fumble";
+                } else if (roll <= Math.floor(targetCalc.sum)) {
+                    result = "success";
+                    if (roll == 1) {
+                        result = "critical";
+                    }
+                } else {
+                    result = "failed";
+                }
+            }
+            resultCount[result]++;
+            rolledStrArr.push(`${roll} ${result == "success" ? "成功" : result == "failed" ? "失敗" : result == "critical" ? "クリティカル" : "ファンブル"}`)
+        }
+        return msg.reply({
+            "embeds": [{
+                "title": `${isCCB ? "CCB" : "CC"}<=${target}`,
+                "description": rolledStrArr.join("\n").replaceAll("*", "\\*") + "\n"
+                    + `成功: ${resultCount["success"]}, 失敗: ${resultCount["failed"]}, \n`
+                    + `クリティカル: ${resultCount["critical"]}, ファンブル: ${resultCount["fumble"]}`,
+                "color": 0x71f26d,
+                "author": {
+                    "name": msg.member?.displayName ?? msg.author.displayName,
+                    "icon_url": msg.member?.avatarURL() ?? msg.author.avatarURL() ?? undefined
+                }
+            }],
+            "allowedMentions": {repliedUser: false}
+        });
     }
 });
 

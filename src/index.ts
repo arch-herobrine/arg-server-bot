@@ -218,7 +218,7 @@ client.on("messageCreate", async (msg) => {
             logger.log(rolledStr);
             msg.reply({
                 "embeds": [{
-                    "title": rolled.exp,
+                    "title": rolled.exp.replaceAll("*", "\\*"),
                     "description": rolledStr.replaceAll("*", "\\*"),
                     "color": targetCalc != null ? success ? 0x41d2f2 : 0xeb4034 : 0x71f26d,
                     "author": {

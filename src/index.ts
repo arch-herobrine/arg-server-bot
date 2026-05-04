@@ -219,7 +219,7 @@ client.on("messageCreate", async (msg) => {
             msg.reply({
                 "embeds": [{
                     "title": rolled.exp,
-                    "description": rolledStr,
+                    "description": rolledStr.replaceAll("*", "\\*"),
                     "color": targetCalc != null ? success ? 0x41d2f2 : 0xeb4034 : 0x71f26d,
                     "author": {
                         "name": msg.member?.displayName ?? msg.author.displayName,

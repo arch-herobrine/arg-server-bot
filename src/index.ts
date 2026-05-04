@@ -82,8 +82,10 @@ client.once("clientReady", async () => {
 client.on("messageCreate", async (msg) => {
     logger.log(msg.content);
     if (msg.author.bot) return;
-    if (/^CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content)) {
-        const parsed = msg.content.replace(/CCB?\<\=/i, "")
+    if (/^CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content.replaceAll("\\*", "*"))) {
+        const parsed = msg.content
+            .replaceAll("\\*", "*")
+            .replace(/CCB?\<\=/i, "")
             .match(/([\d\+\-\*\/\(\)]+)/i);
         if (!parsed) {
             return msg.reply({
@@ -148,7 +150,9 @@ client.on("messageCreate", async (msg) => {
             "allowedMentions": {repliedUser: false}
         });
     } else if (/^dice/.test(msg.content)) {
-        const parsed = msg.content.replaceAll("\\*", "*").replace(/^dice([ 　]*)?/, "")
+        const parsed = msg.content
+            .replaceAll("\\*", "*")
+            .replace(/^dice([ 　]*)?/, "")
             .match(/([\d\+\-\*\/\(\)D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)]+))?/i);
         if (parsed?.length) {
             const rolled = dice(parsed[1]);
@@ -230,7 +234,9 @@ client.on("messageCreate", async (msg) => {
             });
         }
     } else if (/^x(\d+) CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content.replaceAll("\\*", "*"))) {
-        const parsed = msg.content.replaceAll("\\*", "*").replace(/^x(\d+) CCB?\<\=/i, "")
+        const parsed = msg.content
+            .replace(/^x(\d+) CCB?\<\=/i, "")
+            .replaceAll("\\*", "*")
             .match(/([\d\+\-\*\/\(\)]+)/i);
         const repeat = msg.content.match(/^x(\d+)/i);
         if (!parsed || !repeat) {

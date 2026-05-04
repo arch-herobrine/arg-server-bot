@@ -148,7 +148,7 @@ client.on("messageCreate", async (msg) => {
             "allowedMentions": {repliedUser: false}
         });
     } else if (/^dice/.test(msg.content)) {
-        const parsed = msg.content.replace(/^dice([ 　]*)?/, "")
+        const parsed = msg.content.replaceAll("\\*", "*").replace(/^dice([ 　]*)?/, "")
             .match(/([\d\+\-\*\/\(\)D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)]+))?/i);
         if (parsed?.length) {
             const rolled = dice(parsed[1]);
@@ -229,8 +229,8 @@ client.on("messageCreate", async (msg) => {
                 "allowedMentions": {repliedUser: false}
             });
         }
-    } else if (/^x(\d+) CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content)) {
-        const parsed = msg.content.replace(/^x(\d+) CCB?\<\=/i, "")
+    } else if (/^x(\d+) CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content.replaceAll("\\*", "*"))) {
+        const parsed = msg.content.replaceAll("\\*", "*").replace(/^x(\d+) CCB?\<\=/i, "")
             .match(/([\d\+\-\*\/\(\)]+)/i);
         const repeat = msg.content.match(/^x(\d+)/i);
         if (!parsed || !repeat) {

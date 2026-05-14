@@ -13,7 +13,7 @@ const data: CmdContent = {
         "name": "ping",
         "description": "ping/生死確認",
     },
-    async exec(int, client) {
+    async exec(int, client, logger) {
         if (!int.isChatInputCommand()) return;
         const sent = await int.reply({
             "embeds": [{

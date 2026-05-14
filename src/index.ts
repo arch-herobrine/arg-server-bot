@@ -152,8 +152,9 @@ client.on("messageCreate", async (msg) => {
     } else if (/^dice/.test(msg.content)) {
         const parsed = msg.content
             .replaceAll("\\*", "*")
+            .replaceAll("^", "**")
             .replace(/^dice([ 　]*)?/, "")
-            .match(/([\d\+\-\*\/\(\)D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)]+))?/i);
+            .match(/([\d\+\-\*\/\(\)\.D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)\.]+))?/i);
         if (parsed?.length) {
             const rolled = dice(parsed[1]);
             if (rolled.exp == undefined) {
@@ -164,10 +165,10 @@ client.on("messageCreate", async (msg) => {
             }
             logger.log(rolled.exp.split(/([\+\-\*\/])/));
             let pointer = 0;
-            const parts = rolled.exp.split(/([\+\-\*\/\(\)])/);
+            const parts = rolled.exp.replaceAll("**", "^").split(/([\+\-\*\/\(\)\^])/);
             const lengthFlag = 1500 <= (rolled.rolled.join(",").length + rolled.exp.length);
             const formatted = [...parts].map(part => {
-                const diceMatch = part.match(/(\d+)d(\d+)/i);
+                const diceMatch = part.match(/([\d\.]+)d([\d\.]+)/i);
                 if (diceMatch) {
                     const count = parseInt(diceMatch[1], 10);
                     const current = rolled.rolled.slice(pointer, pointer + count);
@@ -218,12 +219,34 @@ client.on("messageCreate", async (msg) => {
                     }
                 }
             }
-            const rolledStr = parts.length == 1 ? `${rolled.sum} ${targetCalc != null ? success ? `成功(目標値${Math.floor(targetCalc.sum)}) ` : `失敗(目標値${Math.floor(targetCalc.sum)}) ` : ""}(${lengthFlag ? "長すぎるため省略" : rolled.rolled.join(",")})` : `${Math.floor(rolled.sum) ? rolled.sum : `${Math.floor(rolled.sum)} [${rolled.sum}]`} ${targetCalc != null ? success ? `成功(目標値${Math.floor(targetCalc.sum)}) ` : `失敗(目標値${Math.floor(targetCalc.sum)}) ` : ""}(${formatted})`;
+            let targetMsg: string = "";
+
+            if (targetCalc != null) {
+                const status: string = success ? "成功" : "失敗";
+                const targetVal: number = Math.floor(targetCalc.sum);
+                targetMsg = `${status}(目標値${targetVal}) `;
+            }
+
+            let sumStr: string | number;
+            let diceDetail: string;
+            sumStr = Math.floor(rolled.sum) == rolled.sum
+                ? rolled.sum
+                : `${Math.floor(rolled.sum)} [${rolled.sum}]`;
+            if (parts.length == 1) {
+                diceDetail = lengthFlag ? "長すぎるため省略" : rolled.rolled.join(",");
+            } else {
+                diceDetail = formatted;
+            }
+            const rolledStr: string = `${sumStr} ${targetMsg}(${diceDetail})`;
             logger.log(rolledStr);
+            let expStr = rolled.exp.replaceAll("**", "^").replaceAll("*", "\\*");
+            if (expStr.length > 255) {
+                expStr = expStr.substring(0, 255) + "…";
+            }
             msg.reply({
                 "embeds": [{
-                    "title": rolled.exp.replaceAll("*", "\\*"),
-                    "description": rolledStr.replaceAll("*", "\\*"),
+                    "title": expStr,
+                    "description": rolledStr.replaceAll("**", "^").replaceAll("*", "\\*"),
                     "color": targetCalc != null ? success ? 0x41d2f2 : 0xeb4034 : 0x71f26d,
                     "author": {
                         "name": msg.member?.displayName ?? msg.author.displayName,
@@ -233,11 +256,12 @@ client.on("messageCreate", async (msg) => {
                 "allowedMentions": {repliedUser: false}
             });
         }
-    } else if (/^x(\d+) CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content.replaceAll("\\*", "*"))) {
+    } else if (/^x(\d+) CC(B)?\<\=([\d\+\-\*\/\(\)\.\^]+)/i.test(msg.content.replaceAll("\\*", "*"))) {
         const parsed = msg.content
             .replace(/^x(\d+) CCB?\<\=/i, "")
             .replaceAll("\\*", "*")
-            .match(/([\d\+\-\*\/\(\)]+)/i);
+            .replaceAll("^", "**")
+            .match(/([\d\+\-\*\/\(\)\.\^]+)/i);
         const repeat = msg.content.match(/^x(\d+)/i);
         if (!parsed || !repeat) {
             return msg.reply({

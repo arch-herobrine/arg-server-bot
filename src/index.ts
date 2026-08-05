@@ -141,64 +141,16 @@ client.on("messageDelete", async (msg) => {
     if (msg.channel.isDMBased()) return;
     if (msg.guildId == "1451413207070539971") {
         const loggingCh = (await client.channels.fetch("1534465219487858688")) as TextChannel;
-
-        // 1. 添付ファイルをバイナリ（Buffer）として再取得して AttachmentBuilder 化
-        const attachments = Array.from(msg.attachments.values());
-        const files: AttachmentBuilder[] = await Promise.all(
-            attachments.map(async (att, index) => {
-                const res = await fetch(att.url);
-                const buffer = Buffer.from(await res.arrayBuffer());
-                const fileName = att.name || `file_${index}`;
-                return new AttachmentBuilder(buffer, { name: fileName });
-            })
-        );
-
-        // 2. 先にファイルだけをログチャンネルにアップロード送信して CDN URL を確定させる
-        const sentMsg = await loggingCh.send({
-            content: `\`${msg.author.username}\`の<#${msg.channel.id}>内のメッセージが削除されました:`,
-            files,
+        loggingCh.send({
+            content: `\`${msg.author.username}\`の<#${msg.channel.id}>内のメッセージが削除されました: `,
+            embeds: [
+                {
+                    description: (msg.content ?? "-# (なし)") + "\n" + msg.attachments.map(att => att.url).join("\n"),
+                    author: getUserInfo(msg),
+                    color: 0xff0000,
+                }
+            ],
         });
-
-        // 3. アップロードされたメッセージから確定した CDN URL を取得
-        const uploadedAttachments = Array.from(sentMsg.attachments.values());
-        const imageUrls: string[] = [];
-
-        uploadedAttachments.forEach((att) => {
-            if (att.contentType?.startsWith('image/')) {
-                imageUrls.push(att.url);
-            }
-        });
-
-        // 4. 確定した CDN URL (https://cdn.discordapp.com/...) を使って Embed を構築
-        const embeds: any[] = [];
-
-        if (imageUrls.length > 0) {
-            // 1枚目：テキスト情報 + 1枚目の画像
-            embeds.push({
-                description: msg.content ?? "-# (なし)",
-                author: getUserInfo(msg),
-                color: 0xff0000,
-                image: { url: imageUrls[0] },
-            });
-
-            // 2枚目以降：1枚目と「全く同じ URL（または何も入れない）」で画像だけセット
-            // ※ 確定 CDN URL を入れることで Discord 側で正しくグリッド化される
-            for (let i = 1; i < imageUrls.length; i++) {
-                embeds.push({
-                    image: { url: imageUrls[i] },
-                });
-            }
-        } else {
-            // 画像がない場合
-            embeds.push({
-                description: msg.content ?? "-# (なし)",
-                author: getUserInfo(msg),
-                color: 0xff0000,
-            });
-        }
-
-        // 5. Embed を付与してメッセージを更新（Edit）
-        await sentMsg.edit({ embeds });
     }
 });
 

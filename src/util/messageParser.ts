@@ -148,6 +148,7 @@ export const handleDiceCommand = async (msg: Message, logger: Logger): Promise<a
         const targetExpr = diceMatch[6];
         if (!rawDiceExpr) return;
 
+        if (/^d+$/i.test(rawDiceExpr)) return;
         // 1. "d100" や "s d100" のように d+数値 の形式を 1d100 に補正
         if (/^d\d+$/i.test(rawDiceExpr)) {
             const faces = rawDiceExpr.replace(/^d/i, "");

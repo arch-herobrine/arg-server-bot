@@ -5,7 +5,7 @@ import {
     CmdContent,
     BtnContent,
     ChatInputCommandInteraction,
-    ApplicationCommandData, Partials, TextChannel
+    ApplicationCommandData, Partials, TextChannel, EmbedBuilder, AttachmentBuilder
 } from "discord.js";
 import fetch from "node-fetch";
 import path from "node:path";
@@ -141,17 +141,61 @@ client.on("messageDelete", async (msg) => {
     if (msg.channel.isDMBased()) return;
     if (msg.guildId == "1451413207070539971") {
         const loggingCh = (await client.channels.fetch("1534465219487858688")) as TextChannel;
-        loggingCh.send({
-            content: `\`${msg.author.username}\`の<#${msg.channel.id}>内のメッセージが削除されました: `,
-            embeds: [
-                {
-                    description: msg.content ?? "-# (なし)",
-                    author: getUserInfo(msg),
-                    color: 0xff0000,
+
+        // 1. 添付ファイルをバイナリ（Buffer）として再取得して AttachmentBuilder 化
+        const attachments = Array.from(msg.attachments.values());
+        const files: AttachmentBuilder[] = await Promise.all(
+            attachments.map(async (att, index) => {
+                const res = await fetch(att.url);
+                const buffer = Buffer.from(await res.arrayBuffer());
+                // 元のファイル名を保持（取得できない場合はフォールバック）
+                const fileName = att.name || `file_${index}`;
+                return new AttachmentBuilder(buffer, { name: fileName });
+            })
+        );
+
+        // 2. 画像ファイルとその他のファイルを分類
+        const imageEmbeds: any[] = [];
+
+        // 元の添付ファイル情報から contentType を確認
+        attachments.forEach((att, index) => {
+            const isImage = att.contentType?.startsWith('image/');
+
+            if (isImage) {
+                const fileName = files[index].name;
+                if (imageEmbeds.length === 0) {
+                    // 1枚目の画像：メインの削除ログ Embed にセット
+                    imageEmbeds.push({
+                        description: msg.content ?? "-# (なし)",
+                        author: getUserInfo(msg),
+                        color: 0xff0000,
+                        image: { url: `attachment://${fileName}` },
+                    });
+                } else {
+                    // 2枚目以降の画像：画像表示用 Embed
+                    imageEmbeds.push({
+                        url: "https://discord.com", // グリッド表示化させるためのダミーURL
+                        image: { url: `attachment://${fileName}` },
+                    });
                 }
-            ],
-            files: msg.attachments.map(att => att.url)
-        })
+            }
+        });
+
+        // 画像が1枚もなかった場合は、通常のログ Embed を1つだけ用意
+        const embeds = imageEmbeds.length > 0 ? imageEmbeds : [
+            {
+                description: msg.content ?? "-# (なし)",
+                author: getUserInfo(msg),
+                color: 0xff0000,
+            }
+        ];
+
+        // 3. 送信
+        await loggingCh.send({
+            content: `\`${msg.author.username}\`の<#${msg.channel.id}>内のメッセージが削除されました:`,
+            embeds,
+            files,
+        });
     }
 });
 

@@ -5,7 +5,7 @@ import {
     CmdContent,
     BtnContent,
     ChatInputCommandInteraction,
-    ApplicationCommandData
+    ApplicationCommandData, Partials, TextChannel
 } from "discord.js";
 import fetch from "node-fetch";
 import path from "node:path";
@@ -14,11 +14,28 @@ import fs from "node:fs";
 import Logger from "@arch-herobrine/logger.js";
 import botConfig from "./config.js";
 import style from "./util/ansi.js";
-import dice from "./util/dice.js";
+import {handleDiceCommand} from "./util/messageParser.js";
+import {getUserInfo} from "./util/util.js";
 
 const __dirname = path.dirname(URL.fileURLToPath(import.meta.url));
 
-const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]});
+let client: Client<boolean>;
+client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.DirectMessageReactions,
+        GatewayIntentBits.DirectMessageTyping,
+    ],
+    partials: [
+        Partials.User,
+        Partials.Channel,
+        Partials.Message,
+        Partials.Reaction,
+    ],
+});
 const logger = new Logger({timeZone: "Asia/Tokyo"});
 client.token = botConfig.bot_token;
 client.cmds = new Collection();
@@ -80,269 +97,61 @@ client.once("clientReady", async () => {
 });
 
 client.on("messageCreate", async (msg) => {
+    if (msg.partial) await msg.fetch();
+    if (msg.channel.partial) await msg.channel.fetch();
     logger.log(msg.content);
     if (msg.author.bot) return;
-    if (/^CC(B)?\<\=([\d\+\-\*\/\(\)]+)/i.test(msg.content.replaceAll("\\*", "*"))) {
-        const parsed = msg.content
-            .replaceAll("\\*", "*")
-            .replace(/CCB?\<\=/i, "")
-            .match(/([\d\+\-\*\/\(\)]+)/i);
-        if (!parsed) {
-            return msg.reply({
-                "content": "不正な入力",
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-        const targetCalc = dice(parsed[0]);
-        const d100Result = dice("1d100").sum;
-        let result: null | "success" | "failed" | "critical" | "fumble" = null;
-        if (!targetCalc.exp) {
-            return msg.reply({
-                "content": "不正な入力",
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-        const target = Math.floor(targetCalc.sum);
-        if (target <= 0) {
-            return msg.reply({
-                "content": "自動失敗",
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-        const isCCB = /^ccb/i.test(msg.content);
-        if (isCCB) {
-            if (d100Result == 100) {
-                result = "fumble";
-            } else if (d100Result <= Math.floor(targetCalc.sum)) {
-                result = "success";
-                if (d100Result <= 5) {
-                    result = "critical";
-                }
-            } else {
-                result = "failed";
-                if (d100Result >= 96) {
-                    result = "fumble";
-                }
-            }
-        } else {
-            if (d100Result == 100) {
-                result = "fumble";
-            } else if (d100Result <= Math.floor(targetCalc.sum)) {
-                result = "success";
-                if (d100Result == 1) {
-                    result = "critical";
-                }
-            } else {
-                result = "failed";
-            }
-        }
-        const rolledStr = `${d100Result} ${result == "success" ? "成功" : result == "failed" ? "失敗" : result == "critical" ? "クリティカル" : "ファンブル"}(目標値: ${target})`
-        return msg.reply({
-            "embeds": [{
-                "title": `${isCCB ? "CCB" : "CC"}<=${target}`,
-                "description": rolledStr,
-                "color": result == "success" || result == "critical" ? 0x41d2f2 : 0xeb4034,
-                "author": {
-                    "name": msg.member?.displayName ?? msg.author.displayName,
-                    "icon_url": msg.member?.avatarURL() ?? msg.author.avatarURL() ?? undefined
-                }
-            }],
-            "allowedMentions": {repliedUser: false}
-        });
-    } else if (/^dice/.test(msg.content)) {
-        const parsed = msg.content
-            .replaceAll("\\*", "*")
-            .replaceAll("^", "**")
-            .replace(/^dice([ 　]*)?/, "")
-            .match(/([\d\+\-\*\/\(\)\.D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)\.]+))?/i);
-        if (parsed?.length) {
-            const rolled = dice(parsed[1]);
-            if (rolled.exp == undefined) {
-                return msg.reply({
-                    "content": "不正な入力",
-                    "allowedMentions": {repliedUser: false}
-                });
-            }
-            logger.log(rolled.exp.split(/([\+\-\*\/])/));
-            let pointer = 0;
-            const parts = rolled.exp.replaceAll("**", "^").split(/([\+\-\*\/\(\)\^])/);
-            const lengthFlag = 1500 <= (rolled.rolled.join(",").length + rolled.exp.length);
-            const formatted = [...parts].map(part => {
-                const diceMatch = part.match(/([\d\.]+)d([\d\.]+)/i);
-                if (diceMatch) {
-                    const count = parseInt(diceMatch[1], 10);
-                    const current = rolled.rolled.slice(pointer, pointer + count);
-                    pointer += count;
-                    const chunkSum = current.reduce((a, b) => a + b, 0);
-                    return ((count <= 1) || lengthFlag) ? `${chunkSum}` : `${chunkSum}[${current.join(",")}]`;
-                }
-                return part;
-            }).join('');
-            let targetCalc: IDiceResult | null = null;
-            let success = false;
-            if (parsed[2]) {
-                targetCalc = dice(parsed[3]);
-                if (!targetCalc.exp) {
-                    return msg.reply({
-                        "content": "不正な入力",
-                        "allowedMentions": {repliedUser: false}
-                    });
-                }
+    await handleDiceCommand(msg, logger);
+});
 
-                switch (parsed[2]) {
-                    case "=": {
-                        success = Math.floor(rolled.sum) == Math.floor(targetCalc.sum);
-                        break;
-                    }
-                    case "<>": {
-                        success = Math.floor(rolled.sum) != Math.floor(targetCalc.sum);
-                        break;
-                    }
-                    case "<=": {
-                        success = Math.floor(rolled.sum) <= Math.floor(targetCalc.sum);
-                        break;
-                    }
-                    case ">=": {
-                        success = Math.floor(rolled.sum) >= Math.floor(targetCalc.sum);
-                        break;
-                    }
-                    case ">": {
-                        success = Math.floor(rolled.sum) > Math.floor(targetCalc.sum);
-                        break;
-                    }
-                    case "<": {
-                        success = Math.floor(rolled.sum) < Math.floor(targetCalc.sum);
-                        break;
-                    }
-                    default: {
-                        break;
-                    }
+client.on("messageUpdate", async (oldMsg, newMsg) => {
+    if (newMsg.partial) await newMsg.fetch();
+    if (newMsg.channel.partial) await newMsg.channel.fetch();
+    if (newMsg.author?.bot) return;
+    if (newMsg.channel.isDMBased()) return;
+    if (newMsg.guildId == "1451413207070539971") {
+        const loggingCh = (await client.channels.fetch("1534465219487858688")) as TextChannel;
+        loggingCh.send({
+            content: `\`${oldMsg.author?.username}\`の<#${oldMsg.channel.id}>内のメッセージが編集されました: `,
+            embeds: [
+                {
+                    description: oldMsg.content ?? "-# (なし)",
+                    author: getUserInfo(newMsg),
+                    footer: {
+                        text: "編集前"
+                    },
+                    color: 0xffff00,
+                },
+                {
+                    description: newMsg.content ?? "-# (なし)",
+                    footer: {
+                        text: "編集後"
+                    },
+                    color: 0xffff00,
                 }
-            }
-            let targetMsg: string = "";
+            ]
+        })
+    }
+});
 
-            if (targetCalc != null) {
-                const status: string = success ? "成功" : "失敗";
-                const targetVal: number = Math.floor(targetCalc.sum);
-                targetMsg = `${status}(目標値${targetVal}) `;
-            }
-
-            let sumStr: string | number;
-            let diceDetail: string;
-            sumStr = Math.floor(rolled.sum) == rolled.sum
-                ? rolled.sum
-                : `${Math.floor(rolled.sum)} [${rolled.sum}]`;
-            if (parts.length == 1) {
-                diceDetail = lengthFlag ? "長すぎるため省略" : rolled.rolled.join(",");
-            } else {
-                diceDetail = formatted;
-            }
-            const rolledStr: string = `${sumStr} ${targetMsg}(${diceDetail})`;
-            logger.log(rolledStr);
-            let expStr = rolled.exp.replaceAll("**", "^").replaceAll("*", "\\*");
-            if (expStr.length > 255) {
-                expStr = expStr.substring(0, 255) + "…";
-            }
-            msg.reply({
-                "embeds": [{
-                    "title": expStr,
-                    "description": rolledStr.replaceAll("**", "^").replaceAll("*", "\\*"),
-                    "color": targetCalc != null ? success ? 0x41d2f2 : 0xeb4034 : 0x71f26d,
-                    "author": {
-                        "name": msg.member?.displayName ?? msg.author.displayName,
-                        "icon_url": msg.member?.avatarURL() ?? msg.author.avatarURL() ?? undefined
-                    }
-                }],
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-    } else if (/^x(\d+) CC(B)?\<\=([\d\+\-\*\/\(\)\.\^]+)/i.test(msg.content.replaceAll("\\*", "*"))) {
-        const parsed = msg.content
-            .replace(/^x(\d+) CCB?\<\=/i, "")
-            .replaceAll("\\*", "*")
-            .replaceAll("^", "**")
-            .match(/([\d\+\-\*\/\(\)\.\^]+)/i);
-        const repeat = msg.content.match(/^x(\d+)/i);
-        if (!parsed || !repeat) {
-            return msg.reply({
-                "content": "不正な入力",
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-        if (parseInt(repeat[1]) > 50) {
-            return msg.reply({
-                "content": "反復回数が多すぎます",
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-        const targetCalc = dice(parsed[0]);
-        const d100Results = dice(`${parseInt(repeat[1])}d100`).rolled;
-        let result: null | "success" | "failed" | "critical" | "fumble" = null;
-        let resultCount: { success: number; failed: number; critical: number; fumble: number } = {
-            "success": 0,
-            "failed": 0,
-            "critical": 0,
-            "fumble": 0
-        }
-        if (!targetCalc.exp) {
-            return msg.reply({
-                "content": "不正な入力",
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-        const target = Math.floor(targetCalc.sum);
-        if (target <= 0) {
-            return msg.reply({
-                "content": "自動失敗",
-                "allowedMentions": {repliedUser: false}
-            });
-        }
-        const isCCB = /^ccb/i.test(msg.content.replace(/^x(\d+) /i, ""));
-        const rolledStrArr: string[] = [];
-        for (const roll of d100Results) {
-            if (isCCB) {
-                if (roll == 100) {
-                    result = "fumble";
-                } else if (roll <= Math.floor(targetCalc.sum)) {
-                    result = "success";
-                    if (roll <= 5) {
-                        result = "critical";
-                    }
-                } else {
-                    result = "failed";
-                    if (roll >= 96) {
-                        result = "fumble";
-                    }
+client.on("messageDelete", async (msg) => {
+    if (msg.partial) return;
+    if (msg.channel.partial) await msg.channel.fetch();
+    if (msg.author.bot) return;
+    if (msg.channel.isDMBased()) return;
+    if (msg.guildId == "1451413207070539971") {
+        const loggingCh = (await client.channels.fetch("1534465219487858688")) as TextChannel;
+        loggingCh.send({
+            content: `\`${msg.author.username}\`の<#${msg.channel.id}>内のメッセージが削除されました: `,
+            embeds: [
+                {
+                    description: msg.content ?? "-# (なし)",
+                    author: getUserInfo(msg),
+                    color: 0xff0000,
                 }
-            } else {
-                if (roll == 100) {
-                    result = "fumble";
-                } else if (roll <= Math.floor(targetCalc.sum)) {
-                    result = "success";
-                    if (roll == 1) {
-                        result = "critical";
-                    }
-                } else {
-                    result = "failed";
-                }
-            }
-            resultCount[result]++;
-            rolledStrArr.push(`${roll} ${result == "success" ? "成功" : result == "failed" ? "失敗" : result == "critical" ? "クリティカル" : "ファンブル"}`)
-        }
-        return msg.reply({
-            "embeds": [{
-                "title": `${isCCB ? "CCB" : "CC"}<=${target}`,
-                "description": (parseInt(repeat[1]) > 10 ? "(10行超えたのでレシート化防ぐために省略)" : rolledStrArr.join("\n").replaceAll("*", "\\*")) + "\n"
-                    + `成功: ${resultCount["success"]}, 失敗: ${resultCount["failed"]}, \n`
-                    + `クリティカル: ${resultCount["critical"]}, ファンブル: ${resultCount["fumble"]}`,
-                "color": 0x71f26d,
-                "author": {
-                    "name": msg.member?.displayName ?? msg.author.displayName,
-                    "icon_url": msg.member?.avatarURL() ?? msg.author.avatarURL() ?? undefined
-                }
-            }],
-            "allowedMentions": {repliedUser: false}
-        });
+            ],
+            files: msg.attachments.map(att => att.url)
+        })
     }
 });
 

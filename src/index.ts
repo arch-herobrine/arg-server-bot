@@ -148,53 +148,57 @@ client.on("messageDelete", async (msg) => {
             attachments.map(async (att, index) => {
                 const res = await fetch(att.url);
                 const buffer = Buffer.from(await res.arrayBuffer());
-                // 元のファイル名を保持（取得できない場合はフォールバック）
                 const fileName = att.name || `file_${index}`;
                 return new AttachmentBuilder(buffer, { name: fileName });
             })
         );
 
-        // 2. 画像ファイルとその他のファイルを分類
-        const imageEmbeds: any[] = [];
+        // 2. 先にファイルだけをログチャンネルにアップロード送信して CDN URL を確定させる
+        const sentMsg = await loggingCh.send({
+            content: `\`${msg.author.username}\`の<#${msg.channel.id}>内のメッセージが削除されました:`,
+            files,
+        });
 
-        // 元の添付ファイル情報から contentType を確認
-        attachments.forEach((att, index) => {
-            const isImage = att.contentType?.startsWith('image/');
+        // 3. アップロードされたメッセージから確定した CDN URL を取得
+        const uploadedAttachments = Array.from(sentMsg.attachments.values());
+        const imageUrls: string[] = [];
 
-            if (isImage) {
-                const fileName = files[index].name;
-                if (imageEmbeds.length === 0) {
-                    // 1枚目の画像：メインの削除ログ Embed にセット
-                    imageEmbeds.push({
-                        description: msg.content ?? "-# (なし)",
-                        author: getUserInfo(msg),
-                        color: 0xff0000,
-                        image: { url: `attachment://${fileName}` },
-                    });
-                } else {
-                    // 2枚目以降の画像：画像表示用 Embed
-                    imageEmbeds.push({
-                        image: { url: `attachment://${fileName}` },
-                    });
-                }
+        uploadedAttachments.forEach((att) => {
+            if (att.contentType?.startsWith('image/')) {
+                imageUrls.push(att.url);
             }
         });
 
-        // 画像が1枚もなかった場合は、通常のログ Embed を1つだけ用意
-        const embeds = imageEmbeds.length > 0 ? imageEmbeds : [
-            {
+        // 4. 確定した CDN URL (https://cdn.discordapp.com/...) を使って Embed を構築
+        const embeds: any[] = [];
+
+        if (imageUrls.length > 0) {
+            // 1枚目：テキスト情報 + 1枚目の画像
+            embeds.push({
                 description: msg.content ?? "-# (なし)",
                 author: getUserInfo(msg),
                 color: 0xff0000,
-            }
-        ];
+                image: { url: imageUrls[0] },
+            });
 
-        // 3. 送信
-        await loggingCh.send({
-            content: `\`${msg.author.username}\`の<#${msg.channel.id}>内のメッセージが削除されました:`,
-            embeds,
-            files,
-        });
+            // 2枚目以降：1枚目と「全く同じ URL（または何も入れない）」で画像だけセット
+            // ※ 確定 CDN URL を入れることで Discord 側で正しくグリッド化される
+            for (let i = 1; i < imageUrls.length; i++) {
+                embeds.push({
+                    image: { url: imageUrls[i] },
+                });
+            }
+        } else {
+            // 画像がない場合
+            embeds.push({
+                description: msg.content ?? "-# (なし)",
+                author: getUserInfo(msg),
+                color: 0xff0000,
+            });
+        }
+
+        // 5. Embed を付与してメッセージを更新（Edit）
+        await sentMsg.edit({ embeds });
     }
 });
 

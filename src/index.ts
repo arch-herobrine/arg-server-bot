@@ -174,7 +174,6 @@ client.on("messageDelete", async (msg) => {
                 } else {
                     // 2枚目以降の画像：画像表示用 Embed
                     imageEmbeds.push({
-                        url: "https://discord.com", // グリッド表示化させるためのダミーURL
                         image: { url: `attachment://${fileName}` },
                     });
                 }

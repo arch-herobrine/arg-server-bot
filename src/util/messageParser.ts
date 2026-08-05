@@ -135,26 +135,37 @@ export const handleDiceCommand = async (msg: Message, logger: Logger): Promise<a
     // =================================================================
     // 先頭に (S)? を追加
     const diceMatch = content.match(
-        /^(S(?:D|ICE)?)?\s*(?:x(\d+)\s+)?(?:(dice)\s*)?([\d\+\-\*\/\(\)\.D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)\.]+))?/i
+        /^(S(?:DICE)?)?\s*(?:x(\d+)\s+)?(?:(dice)\s*)?([\d\+\-\*\/\(\)\.D]+)(?:(<[=>]?|>[=]?|=)([\d\+\-\*\/\(\)\.]+))?/i
     );
 
     if (diceMatch) {
-        const isSecret = Boolean(diceMatch[1]);
+        const secretPrefix = diceMatch[1];
+        const isSecret = Boolean(secretPrefix);
         const repeat = diceMatch[2] ? parseInt(diceMatch[2], 10) : 1;
-        const hasDicePrefix = Boolean(diceMatch[3]) || (diceMatch[1] && /dice/i.test(diceMatch[1]));
+        const hasDicePrefix = Boolean(diceMatch[3]) || (secretPrefix && /dice/i.test(secretPrefix));
         let rawDiceExpr = diceMatch[4];
         const operator = diceMatch[5];
         const targetExpr = diceMatch[6];
         if (!rawDiceExpr) return;
 
-        // "d10" や "10" (sd10など) のように数値単体・または個数省略で指定された場合、1d10 に補正
-        if (/^d?\d+$/i.test(rawDiceExpr)) {
+        // 1. "d100" や "s d100" のように d+数値 の形式を 1d100 に補正
+        if (/^d\d+$/i.test(rawDiceExpr)) {
             const faces = rawDiceExpr.replace(/^d/i, "");
             rawDiceExpr = `1d${faces}`;
-        } else if (!/[\dD]/i.test(rawDiceExpr)) {
-            // 数字も D も含まれていない場合 (例: 単に 's' や 'sd' だけ打たれた時) は無視
+        }
+        // 2. "100" のように数値単体で指定された場合
+        else if (/^\d+$/i.test(rawDiceExpr)) {
+            // s / dice / xN などの明確なコマンド文脈がない単なる数字（例: "100" や "100文字" 等）は無視
+            if (!hasDicePrefix && !isSecret && repeat === 1) {
+                return;
+            }
+            // dice 100 や x3 100 や s 100 などは補正せずそのまま "100" として扱う
+        }
+        // 3. 数字も D も含まれていない場合 (例: 単に 's' だけ打たれた時など) は無視
+        else if (!/[\dD]/i.test(rawDiceExpr)) {
             return;
         }
+
         // -------------------------------------------------------------
         // Sasa等 競合Bot回避ロジック
         // ※シークレットダイス(isSecret)の場合は自分のBotのみ処理したいため、

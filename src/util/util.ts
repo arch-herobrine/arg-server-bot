@@ -1,5 +1,5 @@
 // util.ts
-import {Message, PermissionsBitField} from "discord.js";
+import {GuildMember, Message, PermissionsBitField, TextChannel} from "discord.js";
 import dice, { IDiceResult } from "./dice"; // 既存の dice.ts から読み込み
 
 // ==========================================
@@ -41,37 +41,75 @@ export const evaluateCoC = (roll: number, target: number, isCCB: boolean): RollR
 };
 
 /** 競合させたくないBotのIDリスト */
-const TARGET_BOT_IDS = [
+const COMPETING_BOT_IDS = [
     "1016794326115823708", // Sasa Botの実際のクライアントID（分かっていればID指定が確実です）
 ];
 
 /** チャンネル内に指定した競合Botが存在するか判定する */
 export const hasCompetingBot = async (msg: Message): Promise<boolean> => {
-    // 1. DMなどのサーバー外メッセージの場合は競合ボットなし判定
-    if (!msg.guild || !msg.channel) {
+    if (!msg.guild) return false;
+
+    // 1. キャッシュからチャンネルメンバーを取得（TextChannel など GuildChannel の場合）
+    const channel = msg.channel;
+    let members: Map<string, GuildMember> | undefined;
+
+    if ('members' in channel && channel.members) {
+        // guild.channels 内のキャッシュされたメンバーコレクション (Collection<string, GuildMember>)
+        members = channel.members as any;
+    }
+
+    // 2. キャッシュの中に競合 Bot が存在するかチェック
+    for (const botId of COMPETING_BOT_IDS) {
+        // A. キャッシュ内に Bot が存在する場合
+        if (members && members.has(botId)) {
+            const member = members.get(botId);
+            // オンライン状態かつチャンネルの閲覧・送信権限があるか確認
+            if (member && isBotActiveAndViewable(member, channel as TextChannel)) {
+                return true;
+            }
+        }
+    }
+
+    // 3. キャッシュにメンバー情報が全くない・または不安な場合のみ API から fetch (フォールバック)
+    try {
+        // Guild 全体のキャッシュまたは fetch
+        for (const botId of COMPETING_BOT_IDS) {
+            // guild.members.cache にあるか
+            let member = msg.guild.members.cache.get(botId);
+
+            // なければ API から取得
+            if (!member) {
+                member = await msg.guild.members.fetch(botId).catch(() => undefined);
+            }
+
+            if (member && isBotActiveAndViewable(member, channel as TextChannel)) {
+                return true;
+            }
+        }
+    } catch (error) {
+        // 取得失敗時は競合なしとして扱う
         return false;
     }
-    if (!msg.inGuild()) return false;
 
-    // 2. メンバーの未キャッシュによる判定ミスを防ぐため、最新のメンバー情報をフェッチ
-    //    (規模が大きいサーバー対策。必要に応じて omit も可能)
-    try {
-        await msg.guild.members.fetch();
-    } catch (error) {
-        console.error('Failed to fetch guild members:', error);
+    return false;
+};
+
+// ヘルパー関数: Bot がアクティブでチャンネルを見れるか判定
+const isBotActiveAndViewable = (member: GuildMember, channel: TextChannel): boolean => {
+    // チャンネルでの権限確認（見えない・喋れない Bot は競合とみなさない）
+    const permissions = channel.permissionsFor(member);
+    if (!permissions || !permissions.has(['ViewChannel', 'SendMessages'])) {
+        return false;
     }
 
-    // 3. サーバー内の全メンバーから、このチャンネルの「ViewChannel (閲覧・表示)」権限を持つメンバーを抽出
-    const accessibleMembers = msg.guild.members.cache.filter((member) => {
-        // permissionsFor はロール設定やチャンネル個別の権限オーバーライドを自動で計算してくれる
-        return member.permissionsIn(msg.channel).has(PermissionsBitField.Flags.ViewChannel);
-    });
+    // ステータス（オフライン以外か）チェック
+    // ※ Gateway Intent で GuildPresences を有効にしている場合のみ正確に取れます
+    const status = member.presence?.status;
+    if (status && status === 'offline') {
+        return false;
+    }
 
-    // 4. 自分以外の Bot がアクセス可能かどうかを判定
-    return accessibleMembers.some((member) => {
-        // member に完全な GuildMember 型が付くため、キャストなしで型補完が効く
-        return TARGET_BOT_IDS.includes(member.id);
-    });
+    return true;
 };
 
 

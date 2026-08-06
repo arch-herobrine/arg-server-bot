@@ -200,6 +200,20 @@ export const handleDiceCommand = async (msg: Message, logger: Logger): Promise<a
             results.push(rolled);
         }
 
+        // =============================================================
+        // NaN & ダイスロール未実行の誤爆ガード
+        // =============================================================
+        // 1. 実際にダイスが振られたかチェック（ダイスログ rolled 配列に値があるか）
+        const hasActualDiceRoll = results.some((r) => r.rolled && r.rolled.length > 0);
+
+        // 2. 合計値が NaN (または null / undefined) かチェック
+        const isNaNResult = results.some((r) => Number.isNaN(r.sum));
+
+        // ダイスを1回も振っておらず、かつ計算結果が NaN の場合は誤爆テキストとみなして無効化（スルー）
+        if (!hasActualDiceRoll && isNaNResult) {
+            return;
+        }
+
         // 目標値（比較対象）がある場合の計算
         let targetCalc: IDiceResult | null = null;
         if (operator && targetExpr) {

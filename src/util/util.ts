@@ -94,7 +94,7 @@ export const hasCompetingBot = async (msg: Message): Promise<boolean> => {
     return false;
 };
 
-// ヘルパー関数: Bot がアクティブでチャンネルを見れるか判定
+// ヘルパー関数: Bot がアクティブでチャンネルを見られるか判定
 const isBotActiveAndViewable = (member: GuildMember, channel: TextChannel): boolean => {
     // チャンネルでの権限確認（見えない・喋れない Bot は競合とみなさない）
     const permissions = channel.permissionsFor(member);

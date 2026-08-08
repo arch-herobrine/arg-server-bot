@@ -172,7 +172,7 @@ export const handleDiceCommand = async (msg: Message, logger: Logger): Promise<a
         // ※シークレットダイス(isSecret)の場合は自分のBotのみ処理したいため、
         // 競合Botがいてもスルーさせないように判定から外す
         // -------------------------------------------------------------
-        const isBareRoll = repeat === 1 && !hasDicePrefix && !isSecret;
+        const isBareRoll = repeat === 1 && !hasDicePrefix;
         if (isBareRoll) {
             const isBotPresent = await hasCompetingBot(msg);
             if (isBotPresent) {
